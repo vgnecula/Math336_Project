@@ -87,9 +87,9 @@ fetch_japan_earthquakes <- function(start_date, end_date, min_magnitude = 4.5) {
 }
 
 # Modified analysis function to include new map
-analyze_japan_earthquakes <- function(start_date = Sys.Date() - years(1), 
-                                      end_date = Sys.Date(), 
-                                      min_magnitude = 4.5) {
+analyze_japan_earthquakes <- function(start_date, 
+                                      end_date, 
+                                      min_magnitude) {
   
   # Fetch data
   cat("Fetching earthquake data for Japan...\n")
@@ -197,4 +197,4 @@ analyze_japan_earthquakes <- function(start_date = Sys.Date() - years(1),
 }
 
 # Run the analysis
-japan_results <- analyze_japan_earthquakes()
+japan_results <- analyze_japan_earthquakes("2023-10-18", "2024-10-19", 4.5)
