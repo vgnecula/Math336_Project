@@ -1,8 +1,18 @@
 # Required packages
-library(tidyverse)
-library(lubridate)
+library(tidyverse)  # This includes ggplot2, but we can load it explicitly to be sure
 library(ggplot2)
+library(lubridate)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(sf)
 
+# If any aren't installed, install them first:
+if (!require(tidyverse)) install.packages("tidyverse")
+if (!require(ggplot2)) install.packages("ggplot2")
+if (!require(lubridate)) install.packages("lubridate")
+if (!require(rnaturalearth)) install.packages("rnaturalearth")
+if (!require(rnaturalearthdata)) install.packages("rnaturalearthdata")
+if (!require(sf)) install.packages("sf")
 
 # Function to fit exponential distribution using MLE
 fit_exponential <- function(data) {
@@ -72,7 +82,55 @@ fit_and_compare_distributions <- function(interarrival_times) {
 
 
 
-
+# Function to create visualization of the fits
+create_plots <- function(interarrival_times, results) {
+  # Create data frame for plotting
+  df <- data.frame(
+    interarrival = interarrival_times
+  )
+  
+  # Generate points for theoretical distributions
+  x_range <- seq(0, max(interarrival_times), length.out = 200)
+  
+  # Create theoretical distribution data
+  theoretical_data <- data.frame(
+    x = rep(x_range, 2),
+    density = c(
+      dexp(x_range, rate = results$exponential$estimate),
+      dgamma(x_range, shape = results$gamma$shape, rate = results$gamma$rate)
+    ),
+    Distribution = rep(c("Exponential", "Gamma"), each = length(x_range))
+  )
+  
+  # Create the plot
+  ggplot() +
+    # Add histogram of actual data
+    geom_histogram(data = df, 
+                   aes(x = interarrival, y = ..density..), 
+                   bins = 30, 
+                   fill = "lightblue", 
+                   alpha = 0.7) +
+    # Add theoretical distributions
+    geom_line(data = theoretical_data,
+              aes(x = x, y = density, color = Distribution),
+              linewidth = 1) +
+    # Customize appearance
+    scale_color_manual(values = c("Exponential" = "red", "Gamma" = "blue")) +
+    labs(x = "Interarrival Time (hours)",
+         y = "Density") +
+    theme_minimal() +
+    # Add AIC values as annotations
+    annotate("text", 
+             x = max(interarrival_times) * 0.7,
+             y = max(density(interarrival_times)$y) * 0.8,
+             label = paste("Exponential AIC:", 
+                           round(results$exp_aic, 2))) +
+    annotate("text",
+             x = max(interarrival_times) * 0.7,
+             y = max(density(interarrival_times)$y) * 0.7,
+             label = paste("Gamma AIC:", 
+                           round(results$gamma_aic, 2)))
+}
 
 
 
