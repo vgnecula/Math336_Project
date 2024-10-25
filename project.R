@@ -3,6 +3,79 @@ library(tidyverse)
 library(lubridate)
 library(ggplot2)
 
+
+# Function to fit exponential distribution using MLE
+fit_exponential <- function(data) {
+  # MLE for exponential is 1/mean
+  rate <- 1/mean(data)
+  # Standard error calculation
+  se <- rate/sqrt(length(data))
+  return(list(estimate = rate, sd = se))
+}
+
+# Function to fit gamma distribution using MLE
+fit_gamma <- function(data) {
+  # Initial guess using method of moments
+  mean_x <- mean(data)
+  var_x <- var(data)
+  
+  # Initial shape and rate parameters
+  shape_init <- mean_x^2/var_x
+  rate_init <- mean_x/var_x
+  
+  # Log-likelihood function for gamma distribution
+  gamma_loglik <- function(params) {
+    shape <- params[1]
+    rate <- params[2]
+    sum(dgamma(data, shape = shape, rate = rate, log = TRUE))
+  }
+  
+  # Optimize using optim
+  fit <- optim(c(shape_init, rate_init), 
+               fn = function(p) -gamma_loglik(p), 
+               method = "BFGS")
+  
+  return(list(shape = fit$par[1], rate = fit$par[2]))
+}
+
+# Main function to fit and compare distributions
+fit_and_compare_distributions <- function(interarrival_times) {
+  # Fit exponential distribution
+  exp_fit <- fit_exponential(interarrival_times)
+  
+  # Fit gamma distribution
+  gamma_fit <- fit_gamma(interarrival_times)
+  
+  # Calculate log-likelihoods
+  exp_loglik <- sum(dexp(interarrival_times, 
+                         rate = exp_fit$estimate, 
+                         log = TRUE))
+  
+  gamma_loglik <- sum(dgamma(interarrival_times, 
+                             shape = gamma_fit$shape, 
+                             rate = gamma_fit$rate, 
+                             log = TRUE))
+  
+  # Calculate AIC
+  n <- length(interarrival_times)
+  exp_aic <- -2 * exp_loglik + 2 * 1  # Exponential has 1 parameter
+  gamma_aic <- -2 * gamma_loglik + 2 * 2  # Gamma has 2 parameters
+  
+  # Return results
+  return(list(
+    exponential = exp_fit,
+    gamma = gamma_fit,
+    exp_aic = exp_aic,
+    gamma_aic = gamma_aic
+  ))
+}
+
+
+
+
+
+
+
 # Function to create Japan map with sf
 create_japan_map <- function(df) {
   # Get Japan map data using natural earth
@@ -85,6 +158,7 @@ fetch_japan_earthquakes <- function(start_date, end_date, min_magnitude = 4.5) {
   data <- read.csv(url)
   return(data)
 }
+
 
 # Modified analysis function to include new map
 analyze_japan_earthquakes <- function(start_date, 
