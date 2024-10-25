@@ -14,122 +14,132 @@ if (!require(rnaturalearth)) install.packages("rnaturalearth")
 if (!require(rnaturalearthdata)) install.packages("rnaturalearthdata")
 if (!require(sf)) install.packages("sf")
 
-# Function to fit exponential distribution using MLE
-fit_exponential <- function(data) {
-  # MLE for exponential is 1/mean
+# Function to fit exponential distribution using MOM
+fit_exponential_mom <- function(data) {
   rate <- 1/mean(data)
-  # Standard error calculation
   se <- rate/sqrt(length(data))
-  return(list(estimate = rate, sd = se))
+  loglik <- sum(dexp(data, rate = rate, log = TRUE))
+  return(list(rate = rate, se = se, loglik = loglik))
 }
 
-# Function to fit gamma distribution using MLE
-fit_gamma <- function(data) {
-  # Initial guess using method of moments
+# Function to fit exponential distribution using MLE
+fit_exponential_mle <- function(data) {
+  # For exponential, MLE is same as MOM
+  rate <- 1/mean(data)
+  se <- rate/sqrt(length(data))
+  loglik <- sum(dexp(data, rate = rate, log = TRUE))
+  return(list(rate = rate, se = se, loglik = loglik))
+}
+
+# Function to fit gamma distribution using MOM
+fit_gamma_mom <- function(data) {
   mean_x <- mean(data)
   var_x <- var(data)
   
-  # Initial shape and rate parameters
+  shape <- mean_x^2/var_x
+  rate <- mean_x/var_x
+  
+  loglik <- sum(dgamma(data, shape = shape, rate = rate, log = TRUE))
+  return(list(shape = shape, rate = rate, loglik = loglik))
+}
+
+# Function to fit gamma distribution using MLE
+fit_gamma_mle <- function(data) {
+  # Use MOM estimates as initial values
+  mean_x <- mean(data)
+  var_x <- var(data)
   shape_init <- mean_x^2/var_x
   rate_init <- mean_x/var_x
   
-  # Log-likelihood function for gamma distribution
   gamma_loglik <- function(params) {
     shape <- params[1]
     rate <- params[2]
     sum(dgamma(data, shape = shape, rate = rate, log = TRUE))
   }
   
-  # Optimize using optim
-  fit <- optim(c(shape_init, rate_init), 
-               fn = function(p) -gamma_loglik(p), 
-               method = "BFGS")
+  fit <- optim(c(shape_init, rate_init),
+               fn = function(p) -gamma_loglik(p),
+               method = "BFGS",
+               hessian = TRUE)
   
-  return(list(shape = fit$par[1], rate = fit$par[2]))
-}
-
-# Main function to fit and compare distributions
-fit_and_compare_distributions <- function(interarrival_times) {
-  # Fit exponential distribution
-  exp_fit <- fit_exponential(interarrival_times)
+  # Calculate standard errors
+  if(!any(is.na(fit$hessian))) {
+    fisher_info <- solve(fit$hessian)
+    se <- sqrt(diag(fisher_info))
+  } else {
+    se <- c(NA, NA)
+  }
   
-  # Fit gamma distribution
-  gamma_fit <- fit_gamma(interarrival_times)
-  
-  # Calculate log-likelihoods
-  exp_loglik <- sum(dexp(interarrival_times, 
-                         rate = exp_fit$estimate, 
-                         log = TRUE))
-  
-  gamma_loglik <- sum(dgamma(interarrival_times, 
-                             shape = gamma_fit$shape, 
-                             rate = gamma_fit$rate, 
-                             log = TRUE))
-  
-  # Calculate AIC
-  n <- length(interarrival_times)
-  exp_aic <- -2 * exp_loglik + 2 * 1  # Exponential has 1 parameter
-  gamma_aic <- -2 * gamma_loglik + 2 * 2  # Gamma has 2 parameters
-  
-  # Return results
   return(list(
-    exponential = exp_fit,
-    gamma = gamma_fit,
-    exp_aic = exp_aic,
-    gamma_aic = gamma_aic
+    shape = fit$par[1],
+    rate = fit$par[2],
+    se_shape = se[1],
+    se_rate = se[2],
+    loglik = -fit$value
   ))
 }
 
-
-
-# Function to create visualization of the fits
-create_plots <- function(interarrival_times, results) {
-  # Create data frame for plotting
-  df <- data.frame(
-    interarrival = interarrival_times
-  )
-  
-  # Generate points for theoretical distributions
+# Function to create visualization for each method
+create_method_plot <- function(interarrival_times, method = "MOM") {
+  df <- data.frame(interarrival = interarrival_times)
   x_range <- seq(0, max(interarrival_times), length.out = 200)
   
-  # Create theoretical distribution data
+  # Fit distributions based on method
+  if(method == "MOM") {
+    exp_fit <- fit_exponential_mom(interarrival_times)
+    gamma_fit <- fit_gamma_mom(interarrival_times)
+    
+    exp_dens <- dexp(x_range, rate = exp_fit$rate)
+    gamma_dens <- dgamma(x_range, shape = gamma_fit$shape, rate = gamma_fit$rate)
+    
+    # Calculate AIC
+    exp_aic <- -2 * exp_fit$loglik + 2 * 1
+    gamma_aic <- -2 * gamma_fit$loglik + 2 * 2
+  } else {  # MLE
+    exp_fit <- fit_exponential_mle(interarrival_times)
+    gamma_fit <- fit_gamma_mle(interarrival_times)
+    
+    exp_dens <- dexp(x_range, rate = exp_fit$rate)
+    gamma_dens <- dgamma(x_range, shape = gamma_fit$shape, rate = gamma_fit$rate)
+    
+    # Calculate AIC
+    exp_aic <- -2 * exp_fit$loglik + 2 * 1
+    gamma_aic <- -2 * gamma_fit$loglik + 2 * 2
+  }
+  
   theoretical_data <- data.frame(
     x = rep(x_range, 2),
-    density = c(
-      dexp(x_range, rate = results$exponential$estimate),
-      dgamma(x_range, shape = results$gamma$shape, rate = results$gamma$rate)
-    ),
+    density = c(exp_dens, gamma_dens),
     Distribution = rep(c("Exponential", "Gamma"), each = length(x_range))
   )
   
   # Create the plot
   ggplot() +
-    # Add histogram of actual data
-    geom_histogram(data = df, 
-                   aes(x = interarrival, y = ..density..), 
-                   bins = 30, 
-                   fill = "lightblue", 
+    geom_histogram(data = df,
+                   aes(x = interarrival, y = ..density..),
+                   bins = 30,
+                   fill = "lightblue",
                    alpha = 0.7) +
-    # Add theoretical distributions
     geom_line(data = theoretical_data,
               aes(x = x, y = density, color = Distribution),
               linewidth = 1) +
-    # Customize appearance
     scale_color_manual(values = c("Exponential" = "red", "Gamma" = "blue")) +
     labs(x = "Interarrival Time (hours)",
-         y = "Density") +
+         y = "Density",
+         title = paste("Distribution Fitting using", method),
+         subtitle = paste0(method, " Parameter Estimates\n",
+                           "Exp Rate: ", round(exp_fit$rate, 4), "\n",
+                           "Gamma Shape: ", round(if(method == "MOM") gamma_fit$shape else gamma_fit$shape, 4),
+                           ", Rate: ", round(if(method == "MOM") gamma_fit$rate else gamma_fit$rate, 4))) +
     theme_minimal() +
-    # Add AIC values as annotations
-    annotate("text", 
+    annotate("text",
              x = max(interarrival_times) * 0.7,
              y = max(density(interarrival_times)$y) * 0.8,
-             label = paste("Exponential AIC:", 
-                           round(results$exp_aic, 2))) +
+             label = paste("Exponential AIC:", round(exp_aic, 2))) +
     annotate("text",
              x = max(interarrival_times) * 0.7,
              y = max(density(interarrival_times)$y) * 0.7,
-             label = paste("Gamma AIC:", 
-                           round(results$gamma_aic, 2)))
+             label = paste("Gamma AIC:", round(gamma_aic, 2)))
 }
 
 
@@ -218,11 +228,8 @@ fetch_japan_earthquakes <- function(start_date, end_date, min_magnitude = 4.5) {
 }
 
 
-# Modified analysis function to include new map
-analyze_japan_earthquakes <- function(start_date, 
-                                      end_date, 
-                                      min_magnitude) {
-  
+# Modified analysis function to include the map
+analyze_japan_earthquakes <- function(start_date, end_date, min_magnitude) {
   # Fetch data
   cat("Fetching earthquake data for Japan...\n")
   df <- fetch_japan_earthquakes(start_date, end_date, min_magnitude)
@@ -239,6 +246,10 @@ analyze_japan_earthquakes <- function(start_date,
   times <- diff(df$time)
   interarrival_times <- as.numeric(times, units = "hours")
   
+  # Create map plot first
+  map_plot <- create_japan_map(df)
+  print(map_plot)  # Display the map
+  
   # Basic statistics
   stats <- list(
     total_earthquakes = nrow(df),
@@ -249,81 +260,57 @@ analyze_japan_earthquakes <- function(start_date,
     sd_interarrival = sd(interarrival_times)
   )
   
-  # Model comparison
-  results <- fit_and_compare_distributions(interarrival_times)
+  # Create both MOM and MLE plots
+  mom_plot <- create_method_plot(interarrival_times, "MOM")
+  mle_plot <- create_method_plot(interarrival_times, "MLE")
   
-  # Create visualizations
-  # 1. New map plot with sf
-  map_plot <- create_japan_map(df)
+  # Fit all distributions
+  mom_exp <- fit_exponential_mom(interarrival_times)
+  mom_gamma <- fit_gamma_mom(interarrival_times)
+  mle_exp <- fit_exponential_mle(interarrival_times)
+  mle_gamma <- fit_gamma_mle(interarrival_times)
   
-  # 2. Time series of magnitudes
-  time_plot <- ggplot(df, aes(x = time, y = mag)) +
-    geom_point(aes(color = mag), alpha = 0.6) +
-    scale_color_gradient(low = "yellow", high = "red", name = "Magnitude") +
-    labs(title = "Earthquake Magnitudes Over Time",
-         x = "Date", y = "Magnitude") +
-    theme_minimal()
-  
-  # 3. Distribution fit plot
-  dist_plot <- create_plots(interarrival_times, results) +
-    labs(title = "Earthquake Interarrival Times in Japan",
-         subtitle = paste("Minimum magnitude:", min_magnitude))
-  
-  # 4. Monthly frequency plot
-  monthly_counts <- df %>%
-    mutate(month = floor_date(time, "month")) %>%
-    count(month)
-  
-  monthly_plot <- ggplot(monthly_counts, aes(x = month, y = n)) +
-    geom_bar(stat = "identity", fill = "skyblue") +
-    labs(title = "Monthly Earthquake Frequency",
-         x = "Month", y = "Number of Earthquakes") +
-    theme_minimal()
-  
-  # Print results
-  cat("\nJapan Earthquake Analysis Summary:\n")
-  cat("================================\n")
-  cat("Time Period:", format(start_date), "to", format(end_date), "\n")
-  cat("Minimum magnitude considered:", min_magnitude, "\n")
+  # Print basic statistics
   cat("\nBasic Statistics:\n")
+  cat("=================\n")
   cat("Total earthquakes:", stats$total_earthquakes, "\n")
   cat("Mean magnitude:", round(stats$mean_magnitude, 2), "\n")
   cat("Maximum magnitude:", stats$max_magnitude, "\n")
   cat("Mean interarrival time:", round(stats$mean_interarrival, 2), "hours\n")
   cat("Median interarrival time:", round(stats$median_interarrival, 2), "hours\n")
   
-  # Model comparison results
-  cat("\nModel Comparison Results:\n")
-  cat("--------------------------------\n")
-  cat("Exponential Distribution:\n")
-  cat("Rate:", round(results$exponential$estimate, 4), "\n")
-  cat("Standard Error:", round(results$exponential$sd, 4), "\n")
+  # Print results for both methods
+  cat("\nMethod of Moments (MOM) Results:\n")
+  cat("================================\n")
+  cat("Exponential Rate:", round(mom_exp$rate, 4), "\n")
+  cat("Gamma Shape:", round(mom_gamma$shape, 4), "\n")
+  cat("Gamma Rate:", round(mom_gamma$rate, 4), "\n")
   
-  cat("\nGamma Distribution:\n")
-  cat("Shape:", round(results$gamma$shape, 4), "\n")
-  cat("Rate:", round(results$gamma$rate, 4), "\n")
+  cat("\nMaximum Likelihood Estimation (MLE) Results:\n")
+  cat("==========================================\n")
+  cat("Exponential Rate:", round(mle_exp$rate, 4), "\n")
+  cat("Gamma Shape:", round(mle_gamma$shape, 4), "\n")
+  cat("Gamma Rate:", round(mle_gamma$rate, 4), "\n")
   
-  cat("\nAIC Values:\n")
-  cat("Exponential:", round(results$exp_aic, 2), "\n")
-  cat("Gamma:", round(results$gamma_aic, 2), "\n")
-  
-  # Display plots
-  print(map_plot)
-  print(time_plot)
-  print(dist_plot)
-  print(monthly_plot)
+  # Display distribution plots
+  print(mom_plot)
+  print(mle_plot)
   
   # Return results
   return(list(
     data = df,
     interarrival_times = interarrival_times,
     basic_stats = stats,
-    model_results = results,
-    plots = list(
-      map = map_plot,
-      time_series = time_plot,
-      distribution = dist_plot,
-      monthly = monthly_plot
+    map = map_plot,  # Now including the map in the returned results
+    mom_results = list(
+      exponential = mom_exp,
+      gamma = mom_gamma,
+      plot = mom_plot
+    ),
+    mle_results = list(
+      exponential = mle_exp,
+      gamma = mle_gamma,
+      plot = mle_plot
     )
   ))
 }
