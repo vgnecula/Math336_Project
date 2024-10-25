@@ -2,9 +2,6 @@
 library(tidyverse)
 library(lubridate)
 library(ggplot2)
-library(sf)
-library(rnaturalearth)
-library(rnaturalearthdata)
 
 # Function to create Japan map with sf
 create_japan_map <- function(df) {
@@ -59,6 +56,34 @@ create_japan_map <- function(df) {
     )
   
   return(map_plot)
+}
+
+# Function to fetch earthquake data specifically for Japan
+fetch_japan_earthquakes <- function(start_date, end_date, min_magnitude = 4.5) {
+  # Japan region boundaries
+  # More focused on main Japanese islands
+  minlat <- 30    # Southern boundary
+  maxlat <- 46    # Northern boundary
+  minlon <- 129   # Western boundary
+  maxlon <- 146   # Eastern boundary
+  
+  # Construct URL for USGS API
+  base_url <- "https://earthquake.usgs.gov/fdsnws/event/1/query"
+  
+  url <- sprintf(paste0("%s?format=csv",
+                        "&starttime=%s",
+                        "&endtime=%s",
+                        "&minmagnitude=%s",
+                        "&minlatitude=%s",
+                        "&maxlatitude=%s",
+                        "&minlongitude=%s",
+                        "&maxlongitude=%s"),
+                 base_url, start_date, end_date, min_magnitude,
+                 minlat, maxlat, minlon, maxlon)
+  
+  # Fetch data
+  data <- read.csv(url)
+  return(data)
 }
 
 # Modified analysis function to include new map
@@ -169,17 +194,6 @@ analyze_japan_earthquakes <- function(start_date = Sys.Date() - years(1),
       monthly = monthly_plot
     )
   ))
-}
-
-# First install required packages if not already installed
-if (!requireNamespace("sf", quietly = TRUE)) {
-  install.packages("sf")
-}
-if (!requireNamespace("rnaturalearth", quietly = TRUE)) {
-  install.packages("rnaturalearth")
-}
-if (!requireNamespace("rnaturalearthdata", quietly = TRUE)) {
-  install.packages("rnaturalearthdata")
 }
 
 # Run the analysis
