@@ -52,7 +52,9 @@ calculate_error_metrics <- function(data, fit_results, distribution = "exponenti
   ))
 }
 
-# Function to compare MOM and MLE fits
+#------------------------------------------------------------------------------------------------------------------------------------------------
+# "COMPARE FITS"
+#------------------------------------------------------------------------------------------------------------------------------------------------
 compare_fits <- function(data) {
   # Fit all models
   mom_exp <- fit_exponential_mom(data)
