@@ -15,6 +15,76 @@ if (!require(rnaturalearthdata)) install.packages("rnaturalearthdata")
 if (!require(sf)) install.packages("sf")
 
 #------------------------------------------------------------------------------------------------------------------------------------------------
+# "ERROR METRICS"
+#------------------------------------------------------------------------------------------------------------------------------------------------
+# Function to calculate error metrics properly
+calculate_error_metrics <- function(data, fit_results, distribution = "exponential") {
+  # Create a common grid for density comparison
+  grid_points <- seq(min(data), max(data), length.out = 100)
+  
+  # Calculate theoretical density at grid points
+  if(distribution == "exponential") {
+    theoretical_density <- dexp(grid_points, rate = fit_results$rate)
+  } else {
+    theoretical_density <- dgamma(grid_points, shape = fit_results$shape, rate = fit_results$rate)
+  }
+  
+  # Calculate empirical density at same grid points using kernel density estimation
+  empirical_density <- density(data, n = 100, from = min(data), to = max(data))$y
+  
+  # Calculate error metrics between theoretical and empirical densities
+  mse <- mean((theoretical_density - empirical_density)^2)
+  rmse <- sqrt(mse)
+  mae <- mean(abs(theoretical_density - empirical_density))
+  
+  # Calculate AIC and BIC
+  n_params <- ifelse(distribution == "exponential", 1, 2)
+  n <- length(data)
+  aic <- -2 * fit_results$loglik + 2 * n_params
+  bic <- -2 * fit_results$loglik + log(n) * n_params
+  
+  return(list(
+    mse = mse,
+    rmse = rmse,
+    mae = mae,
+    aic = aic,
+    bic = bic
+  ))
+}
+
+# Function to compare MOM and MLE fits
+compare_fits <- function(data) {
+  # Fit all models
+  mom_exp <- fit_exponential_mom(data)
+  mom_gamma <- fit_gamma_mom(data)
+  mle_exp <- fit_exponential_mle(data)
+  mle_gamma <- fit_gamma_mle(data)
+  
+  # Calculate metrics for each fit
+  metrics_mom_exp <- calculate_error_metrics(data, mom_exp, "exponential")
+  metrics_mom_gamma <- calculate_error_metrics(data, mom_gamma, "gamma")
+  metrics_mle_exp <- calculate_error_metrics(data, mle_exp, "exponential")
+  metrics_mle_gamma <- calculate_error_metrics(data, mle_gamma, "gamma")
+  
+  # Create comparison table with all metrics
+  comparison <- data.frame(
+    Method = c("MOM Exponential", "MOM Gamma", "MLE Exponential", "MLE Gamma"),
+    MSE = c(metrics_mom_exp$mse, metrics_mom_gamma$mse, 
+            metrics_mle_exp$mse, metrics_mle_gamma$mse),
+    RMSE = c(metrics_mom_exp$rmse, metrics_mom_gamma$rmse, 
+             metrics_mle_exp$rmse, metrics_mle_gamma$rmse),
+    MAE = c(metrics_mom_exp$mae, metrics_mom_gamma$mae, 
+            metrics_mle_exp$mae, metrics_mle_gamma$mae),
+    AIC = c(metrics_mom_exp$aic, metrics_mom_gamma$aic, 
+            metrics_mle_exp$aic, metrics_mle_gamma$aic),
+    BIC = c(metrics_mom_exp$bic, metrics_mom_gamma$bic, 
+            metrics_mle_exp$bic, metrics_mle_gamma$bic)
+  )
+  
+  return(comparison)
+}
+
+#------------------------------------------------------------------------------------------------------------------------------------------------
 # FIT EXPONENTIAL USING MOM AND MLE
 # input: numeric vector of interarrival times
 # output: list containing rate (numeric), se (numeric), loglik (numeric)
@@ -39,6 +109,9 @@ fit_exponential_mle <- function(data) {
 # input: numeric vector of interarrival times
 # output: list containing shape (numeric), rate (numeric), loglik (numeric) for MOM
 #         list containing shape (numeric), rate (numeric), se_shape (numeric), se_rate (numeric), loglik (numeric) for MLE
+
+# Observation (Gamma MLE): - no closed form for exists
+#                          - we need se_shape and se_rate
 #------------------------------------------------------------------------------------------------------------------------------------------------
 fit_gamma_mom <- function(data) {
   mean_x <- mean(data)
@@ -326,6 +399,10 @@ analyze_japan_earthquakes <- function(start_date, end_date, min_magnitude) {
   print(mom_plot)
   print(mle_plot)
   
+  # Display comparison tables
+  comparison_results <- compare_fits(interarrival_times)
+  print(comparison_results)
+  
   # Return results
   return(list(
     data = df,
@@ -350,5 +427,4 @@ analyze_japan_earthquakes <- function(start_date, end_date, min_magnitude) {
 # "MAIN"
 #------------------------------------------------------------------------------------------------------------------------------------------------
 japan_results <- analyze_japan_earthquakes("2023-10-18", "2024-10-19", 4.5)
-
 
