@@ -14,7 +14,11 @@ if (!require(rnaturalearth)) install.packages("rnaturalearth")
 if (!require(rnaturalearthdata)) install.packages("rnaturalearthdata")
 if (!require(sf)) install.packages("sf")
 
-# Function to fit exponential distribution using MOM
+#------------------------------------------------------------------------------------------------------------------------------------------------
+# FIT EXPONENTIAL USING MOM AND MLE
+# input: numeric vector of interarrival times
+# output: list containing rate (numeric), se (numeric), loglik (numeric)
+#------------------------------------------------------------------------------------------------------------------------------------------------
 fit_exponential_mom <- function(data) {
   rate <- 1/mean(data)
   se <- rate/sqrt(length(data))
@@ -22,7 +26,6 @@ fit_exponential_mom <- function(data) {
   return(list(rate = rate, se = se, loglik = loglik))
 }
 
-# Function to fit exponential distribution using MLE
 fit_exponential_mle <- function(data) {
   # For exponential, MLE is same as MOM
   rate <- 1/mean(data)
@@ -31,7 +34,12 @@ fit_exponential_mle <- function(data) {
   return(list(rate = rate, se = se, loglik = loglik))
 }
 
-# Function to fit gamma distribution using MOM
+#------------------------------------------------------------------------------------------------------------------------------------------------
+# FIT GAMMA USING MOM AND MLE
+# input: numeric vector of interarrival times
+# output: list containing shape (numeric), rate (numeric), loglik (numeric) for MOM
+#         list containing shape (numeric), rate (numeric), se_shape (numeric), se_rate (numeric), loglik (numeric) for MLE
+#------------------------------------------------------------------------------------------------------------------------------------------------
 fit_gamma_mom <- function(data) {
   mean_x <- mean(data)
   var_x <- var(data)
@@ -43,7 +51,6 @@ fit_gamma_mom <- function(data) {
   return(list(shape = shape, rate = rate, loglik = loglik))
 }
 
-# Function to fit gamma distribution using MLE
 fit_gamma_mle <- function(data) {
   # Use MOM estimates as initial values
   mean_x <- mean(data)
@@ -79,8 +86,12 @@ fit_gamma_mle <- function(data) {
   ))
 }
 
-# Function to create visualization for each method
-create_method_plot <- function(interarrival_times, method = "MOM") {
+#------------------------------------------------------------------------------------------------------------------------------------------------
+# FIT PLOT VISUALISATION - MOM OR MLE
+# input: interarrival_times (numeric vector), method (string: "MOM" or "MLE")
+# output: ggplot object containing histogram, fitted exponential and gamma curves, AIC values
+#------------------------------------------------------------------------------------------------------------------------------------------------
+create_method_plot <- function(interarrival_times, method) {
   df <- data.frame(interarrival = interarrival_times)
   x_range <- seq(0, max(interarrival_times), length.out = 200)
   
@@ -144,7 +155,11 @@ create_method_plot <- function(interarrival_times, method = "MOM") {
 
 
 
-# Function to create Japan map with sf
+#------------------------------------------------------------------------------------------------------------------------------------------------
+# VISUAL MAP FUNCTION
+# input: dataframe containing columns: time (POSIXct), latitude (numeric), longitude (numeric), mag (numeric)
+# output: ggplot object containing map of Japan with plotted earthquakes
+#------------------------------------------------------------------------------------------------------------------------------------------------
 create_japan_map <- function(df) {
   # Get Japan map data using natural earth
   japan_sf <- ne_countries(scale = "medium", 
@@ -199,7 +214,12 @@ create_japan_map <- function(df) {
   return(map_plot)
 }
 
-# Function to fetch earthquake data specifically for Japan
+
+#------------------------------------------------------------------------------------------------------------------------------------------------
+# FETCHING EARTHQUAKES DATA
+# input: start_date (string: "YYYY-MM-DD"), end_date (string: "YYYY-MM-DD"), min_magnitude (numeric)
+# output: dataframe containing earthquake data (time, latitude, longitude, magnitude, etc.)
+#------------------------------------------------------------------------------------------------------------------------------------------------
 fetch_japan_earthquakes <- function(start_date, end_date, min_magnitude = 4.5) {
   # Japan region boundaries
   # More focused on main Japanese islands
@@ -228,7 +248,17 @@ fetch_japan_earthquakes <- function(start_date, end_date, min_magnitude = 4.5) {
 }
 
 
-# Modified analysis function to include the map
+#------------------------------------------------------------------------------------------------------------------------------------------------
+# MAIN ANALYSIS LOGIC
+# input: start_date (string: "YYYY-MM-DD"), end_date (string: "YYYY-MM-DD"), min_magnitude (numeric)
+# output: list containing:
+#         - data (dataframe of raw earthquake data)
+#         - interarrival_times (numeric vector)
+#         - basic_stats (list of summary statistics)
+#         - map (ggplot object)
+#         - mom_results (list of MOM fitting results)
+#         - mle_results (list of MLE fitting results)
+#------------------------------------------------------------------------------------------------------------------------------------------------
 analyze_japan_earthquakes <- function(start_date, end_date, min_magnitude) {
   # Fetch data
   cat("Fetching earthquake data for Japan...\n")
@@ -315,5 +345,10 @@ analyze_japan_earthquakes <- function(start_date, end_date, min_magnitude) {
   ))
 }
 
-# Run the analysis
+
+#------------------------------------------------------------------------------------------------------------------------------------------------
+# "MAIN"
+#------------------------------------------------------------------------------------------------------------------------------------------------
 japan_results <- analyze_japan_earthquakes("2023-10-18", "2024-10-19", 4.5)
+
+
